@@ -51,9 +51,10 @@ type Dependency struct {
 type RepoFunc func(string) (Dependency, error)
 
 var repoFuncs = []RepoFunc{
-  central,
-  jboss,
-  jfrog,
+  spring,
+  //  central,
+  //  jboss,
+  //  jfrog,
 }
 
 // print debug messages to console
