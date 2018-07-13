@@ -1,7 +1,6 @@
 package main
 
 import (
-  "bytes"
   "crypto/sha1"
   "flag"
   "fmt"
@@ -10,14 +9,14 @@ import (
   "os"
   "path/filepath"
   "strings"
-  "sync"
 )
 
 var (
   debug        bool
   outFile      string
   dependencies chan Dependency
-  wg           sync.WaitGroup
+
+//  wg           sync.WaitGroup
 )
 
 const pomTemplate = `<project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -34,14 +33,12 @@ const pomTemplate = `<project xmlns="http://maven.apache.org/POM/4.0.0"
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
-  <dependencies>
-{{range .}}
+  <dependencies>{{range .}}
     <dependency>
       <groupId>{{.GroupId}}</groupId>
       <artifactId>{{.ArtifactId}}</artifactId>
       <version>{{.Version}}</version>
-    </dependency>
-{{end}}
+    </dependency>{{end}}
   </dependencies>
 </project>`
 
@@ -49,6 +46,12 @@ type Dependency struct {
   GroupId    string `json:"groupId"`
   ArtifactId string `json:"artifactId"`
   Version    string `json:"version"`
+}
+
+type RepoFunc func(string) (Dependency, error)
+
+var repoFuncs = []RepoFunc{
+  jboss,
 }
 
 // print debug messages to console
@@ -72,52 +75,6 @@ func getHash(path string) (string, error) {
   return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-// function matching the filepath.WalkFunc
-func walkJar(path string, info os.FileInfo, err error) error {
-  if err != nil {
-    return err
-  }
-  if !info.IsDir() {
-    // file
-    if strings.HasSuffix(path, ".jar") {
-      hash, err := getHash(path)
-      if err != nil {
-        return err
-      }
-      debugf("%s <- %s", hash, filepath.Base(path))
-      wg.Add(1)
-      if err = jboss(hash, dependencies); err != nil {
-        return err
-      }
-    } else {
-      return filepath.SkipDir
-    }
-
-  }
-  return nil
-}
-
-func collect(dependencies <-chan Dependency) {
-  pomTmpl := template.Must(template.New("pom").Parse(pomTemplate))
-  var deps []Dependency
-  for {
-    dep, more := <-dependencies
-    fmt.Println("collect", dep, more)
-    if more {
-      deps = append(deps, dep)
-    } else {
-      fmt.Println(deps)
-      buf := new(bytes.Buffer)
-      err := pomTmpl.Execute(buf, deps)
-      if err == nil {
-        fmt.Println(buf.String())
-      }
-      wg.Done()
-      return
-    }
-  }
-}
-
 func main() {
   flag.BoolVar(&debug, "d", false, "Print debug messages")
   flag.StringVar(&outFile, "o", "pom.xml", "Output file name")
@@ -127,15 +84,48 @@ func main() {
     flag.PrintDefaults()
   }
   debugf("debug: %t, outFile: %s, dirs: %d", debug, outFile, nDirs)
-  dependencies = make(chan Dependency, 1)
-  wg.Add(2)
-  go func() {
-    for i := 0; i < nDirs; i++ {
-      filepath.Walk(flag.Arg(i), walkJar)
-    }
-    close(dependencies)
-    wg.Done()
-  }()
-  go collect(dependencies)
-  wg.Wait()
+  var deps []Dependency
+  dirs := flag.Args()
+  var found, total = 0, 0
+  for _, dir := range dirs {
+    debugf("Scanning %s", dir)
+    filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+      if err != nil {
+        return err
+      }
+      if !info.IsDir() {
+        // file
+        if strings.HasSuffix(path, ".jar") {
+          hash, err := getHash(path)
+          if err != nil {
+            return err
+          }
+          debugf("%s <- %s", hash, filepath.Base(path))
+          total++
+          for _, repoFunc := range repoFuncs {
+            if dep, err := repoFunc(hash); err != nil {
+              // failed one
+              debugf("Failed to find dependency from %v", repoFunc)
+            } else {
+              debugf("%v, %v", dep, err)
+              deps = append(deps, dep)
+              found++
+            }
+          }
+        }
+      }
+      return nil
+    })
+  }
+  pomTmpl := template.Must(template.New("pom").Parse(pomTemplate))
+  debugf("dependencies = %v", deps)
+  out, err := os.Create(outFile)
+  if err != nil {
+    debugf("Failed to open file %s", outFile)
+    panic(err)
+  }
+  err = pomTmpl.Execute(out, deps)
+  if err == nil {
+    fmt.Printf("%d dependencies out of %d jars\n", found, total)
+  }
 }

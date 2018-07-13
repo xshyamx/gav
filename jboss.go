@@ -14,10 +14,8 @@ type JbossResponse struct {
   Data  []Dependency `json:"data"`
 }
 
-func jboss(sha1 string, dependencies chan<- Dependency) error {
-  defer wg.Done()
+func jboss(sha1 string) (dep Dependency, err error) {
   var (
-    err          error
     content      []byte
     req          *http.Request
     res          *http.Response
@@ -26,30 +24,43 @@ func jboss(sha1 string, dependencies chan<- Dependency) error {
   reqUrl := fmt.Sprintf("https://repository.jboss.org/nexus/service/local/lucene/search?sha1=%s", sha1)
   req, err = http.NewRequest(http.MethodGet, reqUrl, nil)
   if err != nil {
-    return nil
+    return
   }
   req.Header.Add("Accept", "application/json")
   res, err = http.DefaultClient.Do(req)
   if err != nil {
-    return err
+    return
   }
   if res.StatusCode != http.StatusOK {
-    return fmt.Errorf("Expected %d got %s for %s", http.StatusOK, res.StatusCode, reqUrl)
+    err = fmt.Errorf("Expected %d got %s for %s", http.StatusOK, res.StatusCode, reqUrl)
+    return
   }
   defer res.Body.Close()
   content, err = ioutil.ReadAll(res.Body)
   if err != nil {
-    return fmt.Errorf("Failed to read response for %s", reqUrl)
+    err = fmt.Errorf("Failed to read response for %s", reqUrl)
+    return
   }
   //debugf("%s", string(content))
   err = json.Unmarshal(content, &repoResponse)
   if err != nil {
-    return fmt.Errorf("Failed to parse JSON for %s", reqUrl)
+    err = fmt.Errorf("Failed to parse JSON for %s", reqUrl)
+    return
   }
   if repoResponse.Count > 0 && len(repoResponse.Data) > 0 {
-    debugf("%v", repoResponse.Data[0])
-    dependencies <- repoResponse.Data[0]
-    //    os.Exit(1)
+    dep = repoResponse.Data[0]
+    debugf("From jboss : %v", dep)
+    return
+  } else {
+    err = fmt.Errorf("Failed to find matching dependency")
   }
+  return
+}
+func jbossAsync(sha1 string, dependencies chan<- Dependency) error {
+  dep, err := jboss(sha1)
+  if err != nil {
+    return err
+  }
+  dependencies <- dep
   return nil
 }
