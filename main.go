@@ -99,7 +99,7 @@ func walkJar(path string, info os.FileInfo, err error) error {
 
 func collect(dependencies <-chan Dependency) {
   pomTmpl := template.Must(template.New("pom").Parse(pomTemplate))
-  deps := make([]Dependency, 1)
+  var deps []Dependency
   for {
     dep, more := <-dependencies
     fmt.Println("collect", dep, more)
