@@ -51,7 +51,9 @@ type Dependency struct {
 type RepoFunc func(string) (Dependency, error)
 
 var repoFuncs = []RepoFunc{
+  central,
   jboss,
+  jfrog,
 }
 
 // print debug messages to console
@@ -105,11 +107,12 @@ func main() {
           for _, repoFunc := range repoFuncs {
             if dep, err := repoFunc(hash); err != nil {
               // failed one
-              debugf("Failed to find dependency from %v", repoFunc)
+              debugf("Failed to find dependency from %v", err)
             } else {
               debugf("%v, %v", dep, err)
               deps = append(deps, dep)
               found++
+              break
             }
           }
         }
