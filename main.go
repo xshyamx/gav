@@ -26,16 +26,16 @@ const pomTemplate = `<project xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>group-id</groupId>
-  <artifactId>artifact-id</artifactId>
-  <version>1.0</version>
+  <groupId>{{.Project.GroupId}}</groupId>
+  <artifactId>{{.Project.ArtifactId}}</artifactId>
+  <version>{{.Project.Version}}</version>
   <packaging>jar</packaging>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
-  <dependencies>{{range .}}
+  <dependencies>{{range .Dependencies}}
     <dependency>
       <groupId>{{.GroupId}}</groupId>
       <artifactId>{{.ArtifactId}}</artifactId>
@@ -48,6 +48,11 @@ type Dependency struct {
 	GroupId    string `json:"groupId"`
 	ArtifactId string `json:"artifactId"`
 	Version    string `json:"version"`
+}
+
+type POM struct {
+	Project      Dependency
+	Dependencies []Dependency
 }
 
 type Result struct {
@@ -88,14 +93,27 @@ func getHash(path string) (string, error) {
 }
 
 func main() {
+	pomDep := Dependency{
+		GroupId:    "com.example",
+		ArtifactId: "sample",
+		Version:    "1.0.0",
+	}
+	pwd, err := os.Getwd()
+	if err == nil {
+		pomDep.ArtifactId = filepath.Base(pwd)
+	}
 	flag.BoolVar(&debug, "d", false, "Print debug messages")
 	flag.StringVar(&outFile, "o", "pom.xml", "Output file name")
+	flag.StringVar(&pomDep.GroupId, "g", pomDep.GroupId, "Optional groupId for the generated pom.xml")
+	flag.StringVar(&pomDep.ArtifactId, "a", pomDep.ArtifactId, "Optional artifactId for the generated pom.xml")
+	flag.StringVar(&pomDep.Version, "v", pomDep.Version, "Optional version for the generated pom.xml")
 	flag.Parse()
 	nDirs := flag.NArg()
 	if nDirs == 0 {
 		flag.PrintDefaults()
 	}
 	debugf("debug: %t, outFile: %s, dirs: %d", debug, outFile, nDirs)
+	debugf("debug: %+v", pomDep)
 	var deps []Dependency
 	var results []Result
 	dirs := flag.Args()
@@ -146,7 +164,10 @@ func main() {
 		debugf("Failed to open file %s", outFile)
 		panic(err)
 	}
-	err = pomTmpl.Execute(out, deps)
+	err = pomTmpl.Execute(out, POM{
+		Project:      pomDep,
+		Dependencies: deps,
+	})
 	if err == nil {
 		fmt.Printf("%d dependencies out of %d jars\n", found, total)
 	}
