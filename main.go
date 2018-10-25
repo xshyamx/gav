@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 )
 
 var (
@@ -21,7 +21,8 @@ var (
 //  wg           sync.WaitGroup
 )
 
-const pomTemplate = `<project xmlns="http://maven.apache.org/POM/4.0.0"
+const pomTemplate = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
@@ -111,6 +112,7 @@ func main() {
 	nDirs := flag.NArg()
 	if nDirs == 0 {
 		flag.PrintDefaults()
+		return
 	}
 	debugf("debug: %t, outFile: %s, dirs: %d", debug, outFile, nDirs)
 	debugf("debug: %+v", pomDep)
@@ -157,6 +159,10 @@ func main() {
 			}
 			return nil
 		})
+	}
+	if len(deps) == 0 {
+		fmt.Printf("No dependencies identified. Will not write %s\n", outFile)
+		return
 	}
 	pomTmpl := template.Must(template.New("pom").Parse(pomTemplate))
 	out, err := os.Create(outFile)
