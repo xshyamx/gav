@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha1"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -18,32 +19,11 @@ var (
 	outFile      string
 	dependencies chan Dependency
 
-//  wg           sync.WaitGroup
+	//  wg           sync.WaitGroup
 )
 
-const pomTemplate = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-
-  <groupId>{{.Project.GroupId}}</groupId>
-  <artifactId>{{.Project.ArtifactId}}</artifactId>
-  <version>{{.Project.Version}}</version>
-  <packaging>jar</packaging>
-
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
-
-  <dependencies>{{range .Dependencies}}
-    <dependency>
-      <groupId>{{.GroupId}}</groupId>
-      <artifactId>{{.ArtifactId}}</artifactId>
-      <version>{{.Version}}</version>
-    </dependency>{{end}}
-  </dependencies>
-</project>`
+//go:embed pom-template.xml
+var pomTemplate string
 
 type Dependency struct {
 	GroupId    string `json:"groupId"`
